@@ -27,44 +27,50 @@ class OpenSeaService:
         }
 
     def get_collection_prices(self, collection_slug: str) -> Optional[Dict[str, Tuple[float, str]]]:
-        """Main method to get prices with retry mechanism"""
+        """Main method to get prices with continuous retry mechanism"""
+        attempt = 1
         last_error = None
+        max_delay = 30  # Maximum delay between retries in seconds
+        base_delay = self._config['retry_delay']
 
-        for attempt in range(self._config['max_retries']):
+        while True:
             try:
+                self.logger.info(f"Attempt {attempt} to get prices...")
                 result = self._try_get_prices(collection_slug)
                 if not result:
-                    continue
+                    raise Exception("Failed to get price data")
 
                 # Validate the result - if either price is UNKNOWN, consider it a failure
                 floor_price, floor_currency = result['floor_price']
                 best_offer, best_currency = result['best_offer']
 
                 if "UNKNOWN" in [floor_currency, best_currency]:
-                    self.logger.warning(
-                        f"Attempt {attempt + 1}: Got UNKNOWN currency, retrying...")
-                    time.sleep(self._config['retry_delay'])
-                    continue
+                    raise Exception("Got UNKNOWN currency")
 
                 if floor_price == 0.0 or best_offer == 0.0:
-                    self.logger.warning(
-                        f"Attempt {attempt + 1}: Got zero price, retrying...")
-                    time.sleep(self._config['retry_delay'])
-                    continue
+                    raise Exception("Got zero price")
 
+                # If we get here, we have valid data
+                self.logger.info("Successfully retrieved price data")
                 return result
 
             except Exception as e:
                 last_error = str(e)
-                self.logger.warning(
-                    f"Attempt {attempt + 1}/{self._config['max_retries']} failed: {last_error}")
-                if attempt < self._config['max_retries'] - 1:
-                    time.sleep(self._config['retry_delay'])
-                    continue
+                # Calculate delay with exponential backoff, capped at max_delay
+                delay = min(base_delay * (1.5 ** (attempt - 1)), max_delay)
 
-        self.logger.error(
-            f"All {self._config['max_retries']} attempts failed. Last error: {last_error}")
-        return None
+                self.logger.warning(
+                    f"Attempt {attempt} failed: {last_error}. "
+                    f"Retrying in {delay:.1f} seconds...")
+
+                time.sleep(delay)
+                attempt += 1
+
+                # Log every 10 attempts
+                if attempt % 10 == 0:
+                    self.logger.error(
+                        f"Still failing after {attempt} attempts. "
+                        f"Last error: {last_error}")
 
     def _try_get_prices(self, collection_slug: str) -> Optional[Dict[str, Tuple[float, str]]]:
         """Single attempt to get prices"""

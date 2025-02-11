@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  price-tracker:
+    build: .
+    container_name: opensea-price-tracker
+    volumes:
+      # Mount the data directory for persistent storage
+      - ./data:/app/data
+      # Mount the .env file
+      - ./.env:/app/.env:ro
+    environment:
+      # Add any additional environment variables here if needed
+      - TZ=UTC
+    restart: unless-stopped
+    # Run in privileged mode for Playwright
+    privileged: true
+
+volumes:
+  data: 

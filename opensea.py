@@ -22,7 +22,7 @@ class OpenSeaService:
         # Timeout and retry settings
         self._config = {
             'max_retries': 5,
-            'timeout': 5000,  # 5 seconds
+            'timeout': 10000,  # 10 seconds
             'retry_delay': 2,  # seconds between retries
         }
 
